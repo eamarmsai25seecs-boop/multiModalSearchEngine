@@ -1,0 +1,273 @@
+# 🔍 Multi-Modal Neural Search Engine
+
+**Dense Retrieval · Query Expansion · Cross-Modal Re-ranking · BERT + CLIP + FAISS**
+
+---
+
+## 📁 Project Structure
+
+```
+multi_modal_search_engine/
+├── app/
+│   └── streamlit_app.py          ← Web UI (run this to use the search engine)
+├── core/
+│   ├── text_encoder.py           ← Sentence-BERT text embeddings
+│   ├── image_encoder.py          ← CLIP image & text embeddings
+│   ├── index_builder.py          ← FAISS index creation and loading
+│   ├── search.py                 ← Multi-modal retrieval logic
+│   ├── reranker.py               ← Cross-encoder re-ranking
+│   └── query_expansion.py        ← WordNet / Word2Vec / PRF expansion
+├── data/
+│   ├── raw/                      ← Downloaded raw files
+│   ├── processed/                ← JSON files used by indexer
+│   ├── images/                   ← Image files (Flickr30k / COCO)
+│   └── texts/                    ← (optional extra text files)
+├── indexes/
+│   ├── text_index.faiss          ← Built by build_index.py
+│   ├── image_index.faiss         ← Built by build_index.py
+│   └── metadata.pkl              ← Doc text + image paths + captions
+├── scripts/
+│   ├── download_data.py          ← Downloads MS MARCO + Flickr30k/COCO
+│   ├── build_index.py            ← Encodes data and builds FAISS indexes
+│   └── evaluate.py               ← P@k, R@k, MAP, MRR, nDCG evaluation
+├── requirements.txt
+└── README.md
+```
+
+---
+
+## ✅ Step-by-Step Setup Guide
+
+### Step 0 — Prerequisites
+
+- Python **3.9 – 3.11** (recommended: 3.10)
+- At least **8 GB RAM** (16 GB preferred)
+- At least **15 GB free disk space**
+- GPU optional but speeds up encoding significantly
+
+---
+
+### Step 1 — Create and activate a virtual environment
+
+```bash
+# Navigate to the project folder
+cd multi_modal_search_engine
+
+# Create virtual environment
+venv\Scripts\activate
+```
+
+---
+
+### Step 2 — Install dependencies
+
+```bash
+pip install --upgrade pip
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# (Use cu118 instead of cpu if you have an NVIDIA GPU)
+
+pip install -r requirements.txt
+
+# Install OpenAI CLIP manually (not on PyPI)
+pip install git+https://github.com/openai/CLIP.git
+
+# Download NLTK data
+python -c "import nltk; nltk.download('wordnet'); nltk.download('stopwords'); nltk.download('punkt'); nltk.download('averaged_perceptron_tagger')"
+```
+
+---
+
+### Step 3 — Download the datasets
+
+#### Option A — Quick start (recommended for first run)
+
+Downloads ~5,000 text passages from MS MARCO and ~2,000 images from Flickr30k.
+Total download size: ~500 MB.
+
+```bash
+python scripts/download_data.py --all --sample 5000
+```
+
+#### Option B — Larger dataset for better results
+
+```bash
+python scripts/download_data.py --coco --sample 5000    # MS-COCO images
+```
+
+#### What gets downloaded:
+
+| Dataset | Modality | Size (sample=5k) | Source |
+|---------|----------|-----------------|--------|
+| Flickr30k | Images + captions | ~400 MB | HuggingFace datasets |
+| MS-COCO val | Images + captions | ~900 MB | images.cocodataset.org |
+
+After this step you will see:
+```
+data/images/flickr/                  ← flickr images
+data/processed/flickr_captions.txt   ← image paths + captions
+data/images/val2017/                 ← COCO images
+data/raw/annotations/captions_train2017.json   ← COCO train captions
+data/raw/annotations/captions_val2017.json   ← COCO val captions
+```
+
+---
+
+### Step 4 — Build the FAISS indexes
+
+This is the **most time-consuming step** (15–60 minutes depending on hardware).
+
+```bash
+# Build both text and image indexes
+python scripts/build_index.py --all --batch-size 64
+
+# Or build them separately
+python scripts/build_index.py --text    # BERT encoding of passages
+python scripts/build_index.py --images  # CLIP encoding of images
+
+# Verify indexes were built correctly
+python scripts/build_index.py --verify
+```
+
+**Expected output:**
+```
+INFO: [TextEncoder] Loading model 'sentence-transformers/all-mpnet-base-v2'...
+INFO: [IndexBuilder] Building text index: 5000 vectors of dim 768
+INFO: Text index saved → indexes/text_index.faiss
+INFO: [ImageEncoder] Loading CLIP 'ViT-B/32'...
+INFO: [IndexBuilder] Building image index: 2000 vectors of dim 512
+INFO: Image index saved → indexes/image_index.faiss
+INFO: Metadata saved → indexes/metadata.pkl
+```
+
+---
+
+### Step 5 — Run the web interface
+
+```bash
+streamlit run app/streamlit_app.py
+```
+
+Open your browser at **http://localhost:8501**
+
+---
+
+### Step 6 — Run evaluation (optional)
+
+```bash
+# Compare dense retrieval vs BM25 baseline
+python scripts/evaluate.py --mode --both
+```
+
+**Expected output:**
+```
+=== BM25 Baseline ===
+  P@10        : 0.1980
+  R@10        : 0.1750
+  MAP         : 0.1340
+  MRR         : 0.2610
+  nDCG@10     : 0.2050
+```
+
+---
+
+## 🔍 How to Use the Search Engine
+
+### Search Modes
+
+| Mode | Query Type | Index Searched | Model Used |
+|------|-----------|---------------|------------|
+| Text → Text | Text string | Text FAISS | Sentence-BERT |
+| Text → Images | Text string | Image FAISS | CLIP text encoder |
+| Image → Text | Uploaded image | Text FAISS | CLIP image encoder |
+| Image → Images | Uploaded image | Image FAISS | CLIP image encoder |
+| Hybrid | Text string | Both indexes | BERT + CLIP + RRF fusion |
+
+### Sidebar Controls
+
+- **Top-k**: How many results to retrieve (5–50)
+- **Re-ranker**: Cross-encoder rescores top-k for better precision
+- **Query expansion**: Automatically adds synonyms/related words
+
+---
+
+## 🧠 Architecture Overview
+
+```
+User Query (text or image)
+        ↓
+  Query Expansion
+        ↓
+  Embedding Generation
+    ├─ Text  → CLIP ViT-B/32  (512-dim)
+    └─ Image → CLIP ViT-B/32  (512-dim)
+        ↓
+  FAISS ANN Search
+    ├─ text.faiss  (IndexFlatIP)
+    └─ image.faiss (IndexFlatIP)
+        ↓
+  Initial Top-k Candidates
+        ↓
+  Cross-Encoder Re-ranking
+    └─ ms-marco-MiniLM-L-6-v2
+        ↓
+  Final Ranked Results
+```
+
+---
+
+## 📊 Datasets Summary
+
+### Flickr30k (Images)
+- **Source**: HuggingFace `nlphuji/flickr30k`
+- **What it is**: 31,783 images, each with 5 human-written captions
+- **We use**: First caption per image as the document "text"
+- **Good for**: Text-to-image and image-to-text retrieval
+
+### MS-COCO 2017 (Alternative images)
+- **Source**: http://cocodataset.org
+- **What it is**: 118K train / 5K val images with 5 captions each
+- **We use**: val2017 subset (5,000 images)
+- **Good for**: Larger-scale image search experiments
+
+---
+
+## ⚡ Performance Tips
+
+| Situation | Recommendation |
+|-----------|---------------|
+| Slow encoding | Use GPU: set `device="cuda"` in encoders |
+| Very large corpus (>100K) | Use `IVF256,PQ32` index (auto-selected) |
+| Better text quality | Switch to `all-mpnet-base-v2` (default) |
+| Faster text encoding | Use `all-MiniLM-L6-v2` |
+| Better image quality | Switch CLIP to `ViT-L/14` |
+| Better re-ranking | Use `cross-encoder/ms-marco-electra-base` |
+
+---
+
+## 🐛 Common Issues
+
+**`ModuleNotFoundError: clip`**
+```bash
+pip install git+https://github.com/openai/CLIP.git
+```
+
+**`No indexes found`**
+```bash
+python scripts/build_index.py --all
+```
+
+**`NLTK resource not found`**
+```python
+import nltk
+nltk.download('all')
+```
+
+**Out of memory during encoding**
+```bash
+python scripts/build_index.py --all --batch-size 16
+```
+
+**Streamlit port already in use**
+```bash
+streamlit run app/streamlit_app.py --server.port 8502
+```

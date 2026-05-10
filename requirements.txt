@@ -1,0 +1,40 @@
+# Core ML
+torch>=2.0.0
+torchvision>=0.15.0
+transformers>=4.35.0
+sentence-transformers>=2.2.2
+git+https://github.com/openai/CLIP.git
+
+# Vector Search
+faiss-cpu>=1.7.4
+
+# Data Processing
+numpy>=1.24.0
+pandas>=2.0.0
+Pillow>=10.0.0
+scikit-learn>=1.3.0
+nltk>=3.8.1
+
+# Query Expansion
+gensim>=4.3.0
+
+# Web Framework
+streamlit>=1.28.0
+fastapi>=0.104.0
+uvicorn>=0.24.0
+python-multipart>=0.0.6
+
+# Evaluation
+# pytrec_eval>=0.5
+rank_bm25>=0.2.2
+
+# Utilities
+tqdm>=4.66.0
+requests>=2.31.0
+matplotlib>=3.7.0
+seaborn>=0.12.0
+# pickle5>=0.0.12
+
+
+nlpaug>=1.1.11
+googletrans==4.0.0rc1
