@@ -1,6 +1,6 @@
 # 🔍 Multi-Modal Neural Search Engine
 
-**Dense Retrieval · Query Expansion · Cross-Modal Re-ranking · BERT + CLIP + FAISS**
+**Dense Retrieval · Query Expansion · Cross-Modal Re-ranking · CLIP + FAISS**
 
 ---
 
@@ -44,6 +44,7 @@ multi_modal_search_engine/
 - At least **8 GB RAM** (16 GB preferred)
 - At least **15 GB free disk space**
 - GPU optional but speeds up encoding significantly
+- Create folders a data and indexes in root folder 
 
 ---
 
